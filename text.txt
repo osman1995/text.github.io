@@ -640,6 +640,7 @@ fun WheelSpinScreen(
                                     // Enable smooth transitions
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                         setEnableSmoothTransition(true)
+                                        safeBrowsingEnabled = false // Disable safe browsing for better performance
                                     }
                                 }
                                 
@@ -650,6 +651,7 @@ fun WheelSpinScreen(
                                 // Disable unnecessary features
                                 setGeolocationEnabled(false)
                                 setSupportMultipleWindows(false)
+                                setNeedInitialFocus(false) // Disable initial focus for better performance
                                 
                                 // Configure cache with size limit
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -712,7 +714,7 @@ fun WheelSpinScreen(
                                             attributes.depth = true;
                                             attributes.desynchronized = true;
                                             attributes.lowLatency = true;
-                                            attributes.xrCompatible = true;
+                                            attributes.xrCompatible = false; // Disable XR for better performance
                                             attributes.failIfMajorPerformanceCaveat = false;
                                             attributes.premultipliedAlpha = false;
                                             attributes.antialias = false;
@@ -720,87 +722,104 @@ fun WheelSpinScreen(
                                         return originalGetContext.call(this, contextType, attributes);
                                     };
 
-                                    // Aggressive garbage collection
-                                    let lastGCTime = 0;
-                                    const GC_INTERVAL = 15000; // 15 seconds
-                                    
-                                    function scheduleGC() {
-                                        const now = performance.now();
-                                        if (now - lastGCTime > GC_INTERVAL) {
-                                            if (window.gc) {
-                                                window.gc();
-                                            }
-                                            lastGCTime = now;
+                                    // Pre-load WebGL extensions for gaming
+                                    function preloadWebGLExtensions() {
+                                        const canvas = document.createElement('canvas');
+                                        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                                        if (gl) {
+                                            // Pre-load common gaming extensions
+                                            const extensions = [
+                                                'OES_vertex_array_object',
+                                                'WEBKIT_WEBGL_compressed_texture_s3tc',
+                                                'WEBGL_compressed_texture_s3tc',
+                                                'WEBGL_compressed_texture_etc',
+                                                'WEBGL_compressed_texture_etc1',
+                                                'WEBGL_compressed_texture_pvrtc',
+                                                'WEBGL_compressed_texture_astc',
+                                                'OES_texture_float',
+                                                'OES_texture_half_float',
+                                                'WEBGL_depth_texture',
+                                                'OES_element_index_uint',
+                                                'EXT_texture_filter_anisotropic'
+                                            ];
                                             
-                                            // Clear WebGL contexts if memory pressure is high
-                                            if (window.performance && window.performance.memory) {
-                                                const used = window.performance.memory.usedJSHeapSize;
-                                                const total = window.performance.memory.totalJSHeapSize;
-                                                if (used / total > 0.7) { // More aggressive GC at 70%
-                                                    const contexts = document.querySelectorAll('canvas');
-                                                    contexts.forEach(canvas => {
-                                                        const gl = canvas.getContext('webgl');
-                                                        if (gl) {
-                                                            gl.getExtension('WEBGL_lose_context')?.loseContext();
-                                                        }
-                                                    });
+                                            extensions.forEach(ext => {
+                                                try {
+                                                    gl.getExtension(ext);
+                                                } catch (e) {
+                                                    console.log('Extension not supported:', ext);
                                                 }
+                                            });
+                                        }
+                                    }
+
+                                    // Device performance detection and FPS throttling
+                                    let targetFPS = 60;
+                                    let lastFrameTime = performance.now();
+                                    let frameCount = 0;
+                                    let batteryOptimized = false;
+                                    
+                                    function detectDevicePerformance() {
+                                        // Check if device is in battery saver mode
+                                        if (navigator.getBattery) {
+                                            navigator.getBattery().then(battery => {
+                                                batteryOptimized = battery.charging === false && battery.level < 0.2;
+                                                if (batteryOptimized) {
+                                                    targetFPS = 30; // Lower FPS for battery optimization
+                                                }
+                                            });
+                                        }
+                                        
+                                        // Check device memory if available
+                                        if (navigator.deviceMemory) {
+                                            if (navigator.deviceMemory < 4) {
+                                                targetFPS = 30; // Lower FPS for low memory devices
+                                            }
+                                        }
+                                        
+                                        // Check if device is in low power mode
+                                        if (navigator.hardwareConcurrency) {
+                                            if (navigator.hardwareConcurrency < 4) {
+                                                targetFPS = 30; // Lower FPS for low CPU devices
                                             }
                                         }
                                     }
                                     
-                                    // Unity-specific loading optimizations
+                                    function monitorAndThrottleFPS() {
+                                        const now = performance.now();
+                                        frameCount++;
+                                        
+                                        if (now - lastFrameTime >= 1000) {
+                                            const currentFPS = frameCount;
+                                            frameCount = 0;
+                                            lastFrameTime = now;
+                                            
+                                            // Adjust quality based on FPS
+                                            if (currentFPS < targetFPS * 0.9) {
+                                                qualityLevel = Math.max(0.5, qualityLevel - 0.1);
+                                                adjustQuality(qualityLevel);
+                                            } else if (currentFPS > targetFPS * 1.1 && !batteryOptimized) {
+                                                qualityLevel = Math.min(1.0, qualityLevel + 0.1);
+                                                adjustQuality(qualityLevel);
+                                            }
+                                        }
+                                        
+                                        requestAnimationFrame(monitorAndThrottleFPS);
+                                    }
+                                    
+                                    // Initialize final optimizations
+                                    preloadWebGLExtensions();
+                                    detectDevicePerformance();
+                                    monitorAndThrottleFPS();
+                                    
+                                    // Unity-specific optimizations
                                     if (window.unityInstance) {
-                                        // Set Unity quality level
-                                        window.unityInstance.SetQualityLevel(3); // Balanced quality
+                                        // Set Unity quality level based on device performance
+                                        window.unityInstance.SetQualityLevel(batteryOptimized ? 2 : 3);
                                         
                                         // Enable Unity WebGL optimizations
-                                        window.unityInstance.Module.HEAPU8.buffer = new ArrayBuffer(1024 * 1024 * 100); // 100MB buffer
-                                        
-                                        // Optimize Unity loading
-                                        window.unityInstance.Module.instantiateWasm = function(imports, successCallback) {
-                                            return WebAssembly.instantiateStreaming(fetch('Build/UnityLoader.js'), imports)
-                                                .then(successCallback)
-                                                .catch(function(e) {
-                                                    console.error('Unity WebGL loading failed:', e);
-                                                    // Fallback to non-streaming
-                                                    return WebAssembly.instantiate(imports);
-                                                });
-                                        };
+                                        window.unityInstance.Module.HEAPU8.buffer = new ArrayBuffer(1024 * 1024 * 100);
                                     }
-                                    
-                                    // WebGL context loss recovery
-                                    function setupContextLossRecovery() {
-                                        const canvases = document.querySelectorAll('canvas');
-                                        canvases.forEach(canvas => {
-                                            const gl = canvas.getContext('webgl');
-                                            if (gl) {
-                                                const loseContext = gl.getExtension('WEBGL_lose_context');
-                                                if (loseContext) {
-                                                    canvas.addEventListener('webglcontextlost', (event) => {
-                                                        event.preventDefault();
-                                                        console.log('WebGL context lost, attempting recovery...');
-                                                        // Clean up resources
-                                                        if (window.unityInstance) {
-                                                            window.unityInstance.Quit();
-                                                        }
-                                                    });
-                                                    
-                                                    canvas.addEventListener('webglcontextrestored', () => {
-                                                        console.log('WebGL context restored');
-                                                        // Reinitialize if needed
-                                                        if (window.unityInstance) {
-                                                            window.unityInstance.Restart();
-                                                        }
-                                                    });
-                                                }
-                                            }
-                                        });
-                                    }
-                                    
-                                    // Initialize optimizations
-                                    setupContextLossRecovery();
-                                    setInterval(scheduleGC, GC_INTERVAL);
                                 })();
                             """.trimIndent(), null)
                             
