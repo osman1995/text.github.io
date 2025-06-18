@@ -92,6 +92,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.HttpURLConnection
+import android.webkit.GeolocationPermissions
+
 
 @Composable
 fun AdCountdownWarning(countdown: Int, onCountdownFinished: () -> Unit) {
@@ -230,7 +232,7 @@ fun WheelSpinScreen(
         if (uri != null && pendingDownloadInfo != null) {
             val (url, filename, mimeType) = pendingDownloadInfo!!
             pendingDownloadInfo = null
-
+            
             // Launch coroutine for download
             CoroutineScope(Dispatchers.IO).launch {
                 try {
@@ -243,7 +245,7 @@ fun WheelSpinScreen(
                     } else {
                         // Download from network
                         val connection = java.net.URL(url).openConnection() as HttpURLConnection
-
+                        
                         // Set common headers that most browsers use
                         connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                         connection.setRequestProperty("Accept", "*/*")
@@ -255,17 +257,17 @@ fun WheelSpinScreen(
                         connection.setRequestProperty("Sec-Fetch-Site", "none")
                         connection.setRequestProperty("Sec-Fetch-User", "?1")
                         connection.setRequestProperty("Upgrade-Insecure-Requests", "1")
-
+                        
                         // Add referer and origin based on the URL
                         val urlObj = java.net.URL(url)
                         val origin = "${urlObj.protocol}://${urlObj.host}"
                         connection.setRequestProperty("Origin", origin)
                         connection.setRequestProperty("Referer", origin)
-
+                        
                         connection.setRequestMethod("GET")
                         connection.setInstanceFollowRedirects(true)
                         connection.connect()
-
+                        
                         if (connection.responseCode == HttpURLConnection.HTTP_OK) {
                             val inputStream = connection.inputStream
                             inputStream.use { input ->
@@ -284,7 +286,7 @@ fun WheelSpinScreen(
                             alternativeConnection.setRequestMethod("GET")
                             alternativeConnection.setInstanceFollowRedirects(true)
                             alternativeConnection.connect()
-
+                            
                             if (alternativeConnection.responseCode in 200..299) {
                                 val inputStream = alternativeConnection.inputStream
                                 inputStream.use { input ->
@@ -300,7 +302,7 @@ fun WheelSpinScreen(
                         }
                     }
                     outputStream?.close()
-
+                    
                     // Show success message on main thread
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, "File saved successfully!", Toast.LENGTH_SHORT).show()
@@ -387,7 +389,7 @@ fun WheelSpinScreen(
                                 try {
                                     // Get the filename from content disposition or URL
                                     var filename = URLUtil.guessFileName(url, contentDisposition, mimeType)
-
+                                    
                                     // If no filename could be determined, use a default name with timestamp
                                     if (filename.isNullOrEmpty() || filename == "downloadfile") {
                                         val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "bin"
@@ -438,7 +440,7 @@ fun WheelSpinScreen(
                                     super.onPageFinished(view, url)
                                     isLoading = false
                                     Log.d("WebView", "Page finished loading: $url")
-
+                                    
                                     // Only inject error monitoring once
                                     if (!isErrorMonitoringInjected) {
                                         view?.evaluateJavascript("""
@@ -448,7 +450,6 @@ fun WheelSpinScreen(
                                                 
                                                 // Global error handler
                                                 window.onerror = function(message, source, lineno, colno, error) {
-                                                    console.error("JS Error:", message, "at", source + ":" + lineno);
                                                     Android.logError(JSON.stringify({
                                                         message: message,
                                                         source: source,
@@ -461,308 +462,15 @@ fun WheelSpinScreen(
                                                 
                                                 // Unhandled promise rejection handler
                                                 window.addEventListener('unhandledrejection', function(event) {
-                                                    console.error("Unhandled Promise Rejection:", event.reason);
                                                     Android.logError(JSON.stringify({
                                                         type: 'unhandledrejection',
                                                         reason: event.reason ? event.reason.toString() : 'undefined'
                                                     }));
                                                 });
-
-                                                // WASM error handler
-                                                window.addEventListener('error', function(event) {
-                                                    if (event.message && event.message.includes('WebAssembly')) {
-                                                        console.error("WASM Error:", event.message);
-                                                        Android.logError(JSON.stringify({
-                                                            type: 'wasm_error',
-                                                            message: event.message
-                                                        }));
-                                                    }
-                                                });
-
-                                                // Ad popup blocker
-                                                try {
-                                                    window.showAd = function() {};
-                                                    window.showInterstitial = function() {};
-                                                    window.showRewardedAd = function() {};
-                                                    window.showReviveAd = function() {};
-
-                                                    const blockSelectors = [
-                                                        '.adblock-message', 
-                                                        '#disable-adblock', 
-                                                        '[class*="adblock"]',
-                                                        '[id*="adblock"]',
-                                                        '[class*="ad-block"]',
-                                                        '[id*="ad-block"]',
-                                                        '[class*="revive"]',
-                                                        '[id*="revive"]'
-                                                    ];
-
-                                                    function removeAdElements() {
-                                                        blockSelectors.forEach(sel => {
-                                                            document.querySelectorAll(sel).forEach(el => el.remove());
-                                                        });
-                                                    }
-
-                                                    // Initial cleanup
-                                                    removeAdElements();
-
-                                                    // Watch for new elements
-                                                    const observer = new MutationObserver((mutations) => {
-                                                        mutations.forEach(m => {
-                                                            m.addedNodes.forEach(node => {
-                                                                if (node.nodeType === 1) {
-                                                                    const content = node.innerHTML?.toLowerCase() || '';
-                                                                    if (content.includes("disable adblock") || 
-                                                                        content.includes("remove adblock") ||
-                                                                        content.includes("revive") ||
-                                                                        content.includes("reward")) {
-                                                                        node.remove();
-                                                                    }
-                                                                }
-                                                            });
-                                                        });
-                                                        removeAdElements();
-                                                    });
-
-                                                    observer.observe(document.body, { 
-                                                        childList: true, 
-                                                        subtree: true 
-                                                    });
-                                                } catch(e) { 
-                                                    console.error("Adblock JS error:", e); 
-                                                }
                                             })();
                                         """.trimIndent(), null)
                                         isErrorMonitoringInjected = true
                                     }
-
-                                    // Inject Unity-specific optimizations
-                                    view?.evaluateJavascript("""
-                                        (function() {
-                                            // Unity Configuration
-                                            const unityConfig = {
-                                                heapSize: 256 * 1024 * 1024, // 256MB initial heap
-                                                maxHeapSize: 512 * 1024 * 1024, // 512MB max heap
-                                                assetCacheSize: 100 * 1024 * 1024, // 100MB asset cache
-                                                audioContext: {
-                                                    sampleRate: 44100,
-                                                    latencyHint: 'interactive',
-                                                    maxChannels: 2
-                                                },
-                                                compression: {
-                                                    gzip: true,
-                                                    brotli: true
-                                                },
-                                                threading: {
-                                                    maxWorkers: 2,
-                                                    disableUnused: true
-                                                }
-                                            };
-
-                                            // Unity Memory Management
-                                            function initUnityMemory() {
-                                                if (window.UnityLoader) {
-                                                    const originalUnityLoader = window.UnityLoader;
-                                                    window.UnityLoader = function(config) {
-                                                        // Configure heap size
-                                                        config.initialHeapSize = unityConfig.heapSize;
-                                                        config.maxHeapSize = unityConfig.maxHeapSize;
-                                                        
-                                                        // Monitor heap usage
-                                                        const originalOnProgress = config.onProgress;
-                                                        config.onProgress = function(progress) {
-                                                            if (originalOnProgress) originalOnProgress(progress);
-                                                            
-                                                            if (window.Module && window.Module.HEAP8) {
-                                                                const heapSize = window.Module.HEAP8.length;
-                                                                const heapUsage = window.Module.HEAP8.filter(x => x !== 0).length;
-                                                                console.log('Unity Heap Usage:', {
-                                                                    total: Math.round(heapSize / 1024 / 1024) + 'MB',
-                                                                    used: Math.round(heapUsage / 1024 / 1024) + 'MB',
-                                                                    percentage: Math.round((heapUsage / heapSize) * 100) + '%'
-                                                                });
-                                                                
-                                                                // Trigger cleanup if heap usage is high
-                                                                if (heapUsage > unityConfig.maxHeapSize * 0.8) {
-                                                                    cleanupUnityMemory();
-                                                                }
-                                                            }
-                                                        };
-                                                        
-                                                        return originalUnityLoader(config);
-                                                    };
-                                                }
-                                            }
-
-                                            // Asset Bundle Caching
-                                            function optimizeAssetBundles() {
-                                                if (window.unityInstance) {
-                                                    // Configure asset bundle cache
-                                                    const originalLoadAssetBundle = window.unityInstance.LoadAssetBundle;
-                                                    window.unityInstance.LoadAssetBundle = function(url, options) {
-                                                        options = options || {};
-                                                        options.cache = true;
-                                                        options.maxCacheSize = unityConfig.assetCacheSize;
-                                                        return originalLoadAssetBundle(url, options);
-                                                    };
-                                                    
-                                                    // Monitor asset cache
-                                                    setInterval(() => {
-                                                        if (window.unityInstance.GetAssetBundleCacheSize) {
-                                                            const cacheSize = window.unityInstance.GetAssetBundleCacheSize();
-                                                            if (cacheSize > unityConfig.assetCacheSize) {
-                                                                window.unityInstance.ClearAssetBundleCache();
-                                                            }
-                                                        }
-                                                    }, 30000);
-                                                }
-                                            }
-
-                                            // Audio Context Optimization
-                                            function optimizeAudioContext() {
-                                                if (window.unityInstance) {
-                                                    const originalCreateAudioContext = window.AudioContext;
-                                                    window.AudioContext = function() {
-                                                        const context = new originalCreateAudioContext({
-                                                            sampleRate: unityConfig.audioContext.sampleRate,
-                                                            latencyHint: unityConfig.audioContext.latencyHint
-                                                        });
-                                                        
-                                                        // Limit audio channels
-                                                        const originalCreateGain = context.createGain;
-                                                        context.createGain = function() {
-                                                            const gain = originalCreateGain.call(this);
-                                                            gain.channelCount = unityConfig.audioContext.maxChannels;
-                                                            return gain;
-                                                        };
-                                                        
-                                                        return context;
-                                                    };
-                                                }
-                                            }
-
-                                            // Input System Optimization
-                                            function optimizeInputSystem() {
-                                                if (window.unityInstance) {
-                                                    // Touch input optimization
-                                                    document.addEventListener('touchstart', function(e) {
-                                                        if (e.touches.length > 2) {
-                                                            e.preventDefault();
-                                                        }
-                                                    }, { passive: false });
-                                                    
-                                                    // Configure input system
-                                                    if (window.unityInstance.SetInputSystemConfig) {
-                                                        window.unityInstance.SetInputSystemConfig({
-                                                            touchInputMode: 'optimized',
-                                                            maxTouchPoints: 2,
-                                                            touchPressureEnabled: false
-                                                        });
-                                                    }
-                                                }
-                                            }
-
-                                            // Threading Optimization
-                                            function optimizeThreading() {
-                                                if (window.Module) {
-                                                    // Disable unnecessary workers
-                                                    if (unityConfig.threading.disableUnused) {
-                                                        window.Module.threadPoolSize = unityConfig.threading.maxWorkers;
-                                                    }
-                                                    
-                                                    // Optimize asm.js for older devices
-                                                    if (window.Module.asm) {
-                                                        const originalAsm = window.Module.asm;
-                                                        window.Module.asm = function() {
-                                                            const result = originalAsm.apply(this, arguments);
-                                                            
-                                                            // Optimize memory operations
-                                                            if (result.memory) {
-                                                                const originalGrow = result.memory.grow;
-                                                                result.memory.grow = function(pages) {
-                                                                    if (pages > 256) { // Limit growth
-                                                                        pages = 256;
-                                                                    }
-                                                                    return originalGrow.call(this, pages);
-                                                                };
-                                                            }
-                                                            
-                                                            return result;
-                                                        };
-                                                    }
-                                                }
-                                            }
-
-                                            // Compression Handling
-                                            function handleCompression() {
-                                                // Check compression support
-                                                const compressionSupport = {
-                                                    gzip: unityConfig.compression.gzip,
-                                                    brotli: unityConfig.compression.brotli
-                                                };
-                                                
-                                                // Configure Unity loader
-                                                if (window.UnityLoader) {
-                                                    const originalUnityLoader = window.UnityLoader;
-                                                    window.UnityLoader = function(config) {
-                                                        config.compressionFormat = compressionSupport.brotli ? 'br' : 
-                                                                                  compressionSupport.gzip ? 'gzip' : 'none';
-                                                        return originalUnityLoader(config);
-                                                    };
-                                                }
-                                            }
-
-                                            // Memory Buffer Monitoring
-                                            function monitorMemoryBuffer() {
-                                                if (window.Module && window.Module.HEAP8) {
-                                                    setInterval(() => {
-                                                        const buffer = window.Module.HEAP8.buffer;
-                                                        const usage = new Uint8Array(buffer).filter(x => x !== 0).length;
-                                                        
-                                                        if (usage > unityConfig.maxHeapSize * 0.8) {
-                                                            // Force garbage collection if available
-                                                            if (window.gc) {
-                                                                window.gc();
-                                                            }
-                                                            
-                                                            // Clear unused buffers
-                                                            if (window.unityInstance) {
-                                                                window.unityInstance.ClearUnusedBuffers();
-                                                            }
-                                                        }
-                                                    }, 5000);
-                                                }
-                                            }
-
-                                            // Initialize all optimizations
-                                            function initUnityOptimizations() {
-                                                initUnityMemory();
-                                                optimizeAssetBundles();
-                                                optimizeAudioContext();
-                                                optimizeInputSystem();
-                                                optimizeThreading();
-                                                handleCompression();
-                                                monitorMemoryBuffer();
-                                                
-                                                // Log optimization status
-                                                console.log('Unity Optimizations Initialized:', {
-                                                    heapSize: Math.round(unityConfig.heapSize / 1024 / 1024) + 'MB',
-                                                    maxHeapSize: Math.round(unityConfig.maxHeapSize / 1024 / 1024) + 'MB',
-                                                    assetCacheSize: Math.round(unityConfig.assetCacheSize / 1024 / 1024) + 'MB',
-                                                    audioConfig: unityConfig.audioContext,
-                                                    compression: unityConfig.compression,
-                                                    threading: unityConfig.threading
-                                                });
-                                            }
-
-                                            // Start optimizations when Unity is ready
-                                            if (window.unityInstance) {
-                                                initUnityOptimizations();
-                                            } else {
-                                                window.addEventListener('UnityReady', initUnityOptimizations);
-                                            }
-                                        })();
-                                    """.trimIndent(), null)
                                 }
 
                                 override fun onReceivedError(
@@ -771,39 +479,19 @@ fun WheelSpinScreen(
                                     error: WebResourceError?
                                 ) {
                                     super.onReceivedError(view, request, error)
+                                    // Only show error for main frame requests
                                     if (request?.isForMainFrame == true) {
                                         val errorDesc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                                             error?.description ?: "Unknown error"
                                         } else {
                                             "Error loading page"
                                         }
-
-                                        // Handle WebAssembly specific errors
-                                        if (errorDesc.contains("WebAssembly") || errorDesc.contains("wasm")) {
-                                            Log.e("WebView", "WebAssembly error: $errorDesc")
-                                            // Attempt to recover from WebAssembly errors
-                                            view?.evaluateJavascript("""
-                                                if (window.unityInstance) {
-                                                    try {
-                                                        window.unityInstance.Quit();
-                                                        setTimeout(() => {
-                                                            window.location.reload();
-                                                        }, 1000);
-                                                    } catch(e) {
-                                                        console.error('Unity recovery failed:', e);
-                                                    }
-                                                }
-                                            """.trimIndent(), null)
-                                        }
-
-                                        // Log detailed error information
-                                        Log.e("WebViewError", "Error loading page: $errorDesc")
-                                        Log.e("WebViewError", "URL: ${request.url}")
-                                        Log.e("WebViewError", "Method: ${request.method}")
-                                        Log.e("WebViewError", "Headers: ${request.requestHeaders}")
-
+                                        
+                                        // Check if it's a network error
                                         if (errorDesc.contains("net::err_failed")) {
+                                            // Don't show error for network failures, just log it
                                             Log.w("WebView", "Network error detected: $errorDesc")
+                                            // Try to reload after a short delay
                                             view?.postDelayed({
                                                 if (isOnlineCompat(context)) {
                                                     view.reload()
@@ -831,27 +519,10 @@ fun WheelSpinScreen(
                                     view: WebView?,
                                     request: WebResourceRequest?
                                 ): WebResourceResponse? {
-                                    val url = request?.url?.toString() ?: return null
-
-                                    val blockedKeywords = listOf(
-                                        "ads.", "revive", "rewarded", "interstitial", "doubleclick", 
-                                        "googlesyndication", "adservice", "adnxs", "moatads", 
-                                        "amazon-adsystem", "pagead", "zedo", "adsafeprotected",
-                                        "adcolony", "chartboost", "vungle", "applovin", "ironsource",
-                                        "tapjoy", "supersonic", "fyber", "mopub", "startapp", "inmobi",
-                                        "banner", "sponsor", "promo", "popup", "overlay", "adblock",
-                                        "gamedistribution", "y8", "unity", "admob", "adcolony",
-                                        "chartboost", "vungle", "applovin", "ironsource", "tapjoy",
-                                        "supersonic", "fyber", "mopub", "startapp", "inmobi"
-                                    )
-
-                                    for (keyword in blockedKeywords) {
-                                        if (url.contains(keyword)) {
-                                            Log.d("AdBlock", "Blocked request: $url")
-                                            return WebResourceResponse("text/plain", "utf-8", null) // Silent block
-                                        }
+                                    val url = request?.url?.toString() ?: ""
+                                    if (url.contains("relay-event.talkie-ai.com")) {
+                                        Log.w("WebView", "CORS request detected: $url")
                                     }
-
                                     return super.shouldInterceptRequest(view, request)
                                 }
 
@@ -876,7 +547,12 @@ fun WheelSpinScreen(
                                     val message = consoleMessage?.message() ?: ""
                                     val source = consoleMessage?.sourceId() ?: ""
                                     val lineNumber = consoleMessage?.lineNumber() ?: 0
-
+                                    
+                                    // WebGL performance monitoring
+                                    if (message.contains("WebGL") || message.contains("Unity")) {
+                                        Log.d("WebView", "WebGL/Unity: $message (at $source:$lineNumber)")
+                                    }
+                                    
                                     when {
                                         message.contains("TikTok Pixel") -> {
                                             Log.w("WebView", "TikTok Pixel issue: $message (at $source:$lineNumber)")
@@ -900,24 +576,43 @@ fun WheelSpinScreen(
                                     return super.onConsoleMessage(consoleMessage)
                                 }
 
+                                // Handle geolocation requests
+                                override fun onGeolocationPermissionsShowPrompt(
+                                    origin: String?,
+                                    callback: GeolocationPermissions.Callback?
+                                ) {
+                                    callback?.invoke(origin, true, false)
+                                }
+
+                                // Handle fullscreen mode
+                                override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                                    super.onShowCustomView(view, callback)
+                                    // Handle fullscreen mode if needed
+                                }
+
+                                override fun onHideCustomView() {
+                                    super.onHideCustomView()
+                                    // Exit fullscreen mode if needed
+                                }
+
+                                // Handle file chooser
                                 override fun onShowFileChooser(
                                     webView: WebView?,
                                     filePathCallback: ValueCallback<Array<Uri>>?,
                                     fileChooserParams: FileChooserParams?
                                 ): Boolean {
                                     pendingFileUpload = filePathCallback
-                                    // Launch file picker directly
                                     filePickerLauncher.launch(arrayOf("*/*"))
                                     return true
                                 }
 
+                                // Block pop-ups
                                 override fun onCreateWindow(
                                     view: WebView?,
                                     isDialog: Boolean,
                                     isUserGesture: Boolean,
                                     resultMsg: android.os.Message?
                                 ): Boolean {
-                                    // Block all pop-ups
                                     return false
                                 }
                             }
@@ -933,958 +628,176 @@ fun WheelSpinScreen(
                                 allowFileAccess = true
                                 allowContentAccess = true
                                 useWideViewPort = true
-                                loadWithOverviewMode = false
+                                loadWithOverviewMode = true
                                 builtInZoomControls = false
                                 displayZoomControls = false
                                 setSupportZoom(false)
                                 mediaPlaybackRequiresUserGesture = false
                                 
-                                // Enhanced WebGL and Unity optimizations
-                                databaseEnabled = true
-                                setGeolocationEnabled(true)
-                                setRenderPriority(WebSettings.RenderPriority.HIGH)
-                                setEnableSmoothTransition(true)
+                                // Critical GPU acceleration settings
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                    // Enable smooth transitions for better performance
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        setEnableSmoothTransition(true)
+                                    }
+                                }
+                                
+                                // Allow universal access for better game loading
+                                allowUniversalAccessFromFileURLs = true
+                                allowFileAccessFromFileURLs = true
+                                
+                                // Configure cache with size limit
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                    setCacheMode(WebSettings.LOAD_DEFAULT)
+                                }
                                 
                                 // Enable hardware acceleration
                                 setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
                                 
-                                // Enable WebGL and WebAssembly
-                                setWebContentsDebuggingEnabled(true)
-                                
-                                // Optimized cache configuration
-                                cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                                // Enable database storage
                                 databaseEnabled = true
-                                domStorageEnabled = true
                                 
-                                // Set a modern user agent that supports WebGL and WebAssembly
-                                userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                                
-                                // Enable additional features for WebGL and WebAssembly
-                                setJavaScriptCanOpenWindowsAutomatically(true)
-                                setAllowUniversalAccessFromFileURLs(true)
-                                setAllowFileAccessFromFileURLs(true)
-                                
-                                // Enhanced settings for heavy graphic games
-                                setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW)
-                                setSupportMultipleWindows(false)
-                                setBlockNetworkImage(false)
-                                setPluginState(WebSettings.PluginState.ON_DEMAND)
-                                setNeedInitialFocus(false)
-                                
-                                // Disable text selection for better game experience
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    setDisabledActionModeMenuItems(
-                                        WebSettings.MENU_ITEM_SHARE or
-                                        WebSettings.MENU_ITEM_WEB_SEARCH or
-                                        WebSettings.MENU_ITEM_PROCESS_TEXT
-                                    )
-                                }
-                                
-                                // Enable offscreen pre-raster if available
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                    setOffscreenPreRaster(true)
-                                }
-                                
-                                // Enable WebGL debugging for development
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                                    setWebContentsDebuggingEnabled(true)
+                                // Set a modern user agent with Unity WebGL support
+                                userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 UnityWebGL"
+                            }
+                            
+                            // System-level performance optimizations
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                (context as? Activity)?.window?.apply {
+                                    addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                        setSustainedPerformanceMode(true)
+                                    }
                                 }
                             }
-
-                            // Inject mobile GPU optimizations
-                            evaluateJavascript("""
-                                (function() {
-                                    // Mobile GPU detection and optimization
-                                    function detectMobileGPU() {
-                                        const canvas = document.createElement('canvas');
-                                        const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
-                                        if (!gl) return null;
-                                        
-                                        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-                                        if (!debugInfo) return null;
-                                        
-                                        const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-                                        const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-                                        
-                                        return {
-                                            renderer: renderer,
-                                            vendor: vendor,
-                                            isMobile: /Mobile|Android|Adreno|Mali|PowerVR/i.test(renderer)
-                                        };
-                                    }
-                                    
-                                    const gpuInfo = detectMobileGPU();
-                                    console.log('GPU Info:', gpuInfo);
-                                    
-                                    // Mobile GPU optimization configuration
-                                    const mobileConfig = {
-                                        maxTextureSize: 2048, // Limit texture size for mobile
-                                        maxAnisotropy: 2, // Lower anisotropy for mobile
-                                        maxSamples: 0, // Disable MSAA on mobile
-                                        useHalfFloat: true, // Use half float for mobile
-                                        useCompressedTextures: true, // Use compressed textures
-                                        useLowPowerMode: true, // Enable low power mode
-                                        frameRateLimit: 60, // Limit frame rate
-                                        qualityLevel: 2 // Default quality level for mobile
-                                    };
-                                    
-                                    // Apply mobile optimizations
-                                    if (gpuInfo && gpuInfo.isMobile) {
-                                        // Override WebGL context creation
-                                        const getContext = HTMLCanvasElement.prototype.getContext;
-                                        HTMLCanvasElement.prototype.getContext = function(contextType, contextAttributes) {
-                                            if (contextType === 'webgl' || contextType === 'webgl2') {
-                                                contextAttributes = contextAttributes || {};
-                                                // Mobile-specific optimizations
-                                                contextAttributes.alpha = false;
-                                                contextAttributes.antialias = false;
-                                                contextAttributes.preserveDrawingBuffer = false;
-                                                contextAttributes.powerPreference = 'high-performance';
-                                                contextAttributes.failIfMajorPerformanceCaveat = false;
-                                                contextAttributes.depth = true;
-                                                contextAttributes.stencil = true;
-                                                contextAttributes.desynchronized = true;
-                                                
-                                                const context = getContext.call(this, contextType, contextAttributes);
-                                                
-                                                if (context) {
-                                                    // Apply mobile-specific WebGL optimizations
-                                                    const maxTextureSize = context.getParameter(context.MAX_TEXTURE_SIZE);
-                                                    if (maxTextureSize > mobileConfig.maxTextureSize) {
-                                                        context.getParameter = function(parameter) {
-                                                            if (parameter === context.MAX_TEXTURE_SIZE) {
-                                                                return mobileConfig.maxTextureSize;
-                                                            }
-                                                            return context.getParameter(parameter);
-                                                        };
-                                                    }
-                                                    
-                                                    // Limit anisotropy
-                                                    const ext = context.getExtension('EXT_texture_filter_anisotropic');
-                                                    if (ext) {
-                                                        const maxAnisotropy = context.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
-                                                        if (maxAnisotropy > mobileConfig.maxAnisotropy) {
-                                                            context.texParameterf = function(target, pname, param) {
-                                                                if (pname === ext.TEXTURE_MAX_ANISOTROPY_EXT) {
-                                                                    param = Math.min(param, mobileConfig.maxAnisotropy);
-                                                                }
-                                                                return context.texParameterf(target, pname, param);
-                                                            };
-                                                        }
-                                                    }
-                                                    
-                                                    // Disable MSAA
-                                                    if (mobileConfig.maxSamples === 0) {
-                                                        const ext = context.getExtension('WEBGL_multisample_draw_buffers');
-                                                        if (ext) {
-                                                            context.getParameter = function(parameter) {
-                                                                if (parameter === ext.MAX_SAMPLES_WEBGL) {
-                                                                    return 0;
-                                                                }
-                                                                return context.getParameter(parameter);
-                                                            };
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                return context;
-                                            }
-                                            return getContext.call(this, contextType, contextAttributes);
-                                        };
-                                        
-                                        // Unity-specific mobile optimizations
-                                        if (window.unityInstance) {
-                                            // Set mobile quality level
-                                            window.unityInstance.SetQualityLevel(mobileConfig.qualityLevel);
-                                            
-                                            // Enable mobile optimizations
-                                            window.unityInstance.SetLowPowerMode(mobileConfig.useLowPowerMode);
-                                            
-                                            // Set frame rate limit
-                                            if (window.unityInstance.Module) {
-                                                window.unityInstance.Module.setFrameRateLimit(mobileConfig.frameRateLimit);
-                                            }
-                                        }
-                                        
-                                        // Performance monitoring
-                                        let lastFrameTime = performance.now();
-                                        let frameCount = 0;
-                                        let fpsHistory = [];
-                                        
-                                        function monitorPerformance() {
-                                            const currentTime = performance.now();
-                                            frameCount++;
-                                            
-                                            if (currentTime - lastFrameTime >= 1000) {
-                                                const fps = Math.round((frameCount * 1000) / (currentTime - lastFrameTime));
-                                                fpsHistory.push(fps);
-                                                
-                                                // Keep last 10 FPS measurements
-                                                if (fpsHistory.length > 10) {
-                                                    fpsHistory.shift();
-                                                }
-                                                
-                                                // Calculate average FPS
-                                                const avgFps = fpsHistory.reduce((a, b) => a + b) / fpsHistory.length;
-                                                
-                                                // Adjust quality based on performance
-                                                if (avgFps < 30 && window.unityInstance) {
-                                                    const currentQuality = window.unityInstance.GetQualityLevel();
-                                                    if (currentQuality > 0) {
-                                                        window.unityInstance.SetQualityLevel(currentQuality - 1);
-                                                        console.log('Reducing quality level to:', currentQuality - 1);
-                                                    }
-                                                }
-                                                
-                                                frameCount = 0;
-                                                lastFrameTime = currentTime;
-                                            }
-                                            
-                                            requestAnimationFrame(monitorPerformance);
-                                        }
-                                        
-                                        // Start performance monitoring
-                                        monitorPerformance();
-                                    }
-                                })();
-                            """.trimIndent(), null)
-
-                            // Initialize and optimize cache directories
-                            val cacheDir = File(context.cacheDir, "webview_cache")
-                            val appCacheDir = File(context.cacheDir, "webview_appcache")
-                            val databaseDir = File(context.cacheDir, "webview_database")
                             
-                            // Create cache directories if they don't exist
-                            if (!cacheDir.exists()) cacheDir.mkdirs()
-                            if (!appCacheDir.exists()) appCacheDir.mkdirs()
-                            if (!databaseDir.exists()) databaseDir.mkdirs()
-
-                            // Set cache size (50MB)
-                            val maxCacheSize = 50 * 1024 * 1024L // 50MB in bytes
-                            
-                            // Clear old cache on startup
-                            clearCache(true)
-                            clearHistory()
-
-                            // Inject cache optimization JavaScript
-                            evaluateJavascript("""
-                                (function() {
-                                    // Configure IndexedDB for offline storage
-                                    if (window.indexedDB) {
-                                        const request = indexedDB.open('GameCache', 1);
-                                        request.onupgradeneeded = function(event) {
-                                            const db = event.target.result;
-                                            if (!db.objectStoreNames.contains('gameAssets')) {
-                                                db.createObjectStore('gameAssets', { keyPath: 'url' });
-                                            }
-                                        };
-                                    }
-
-                                    // Configure Cache API
-                                    if ('caches' in window) {
-                                        caches.open('game-assets').then(function(cache) {
-                                            // Set cache size limit
-                                            const maxSize = 50 * 1024 * 1024; // 50MB
-                                            cache.keys().then(function(keys) {
-                                                let totalSize = 0;
-                                                keys.forEach(function(key) {
-                                                    cache.match(key).then(function(response) {
-                                                        if (response) {
-                                                            response.blob().then(function(blob) {
-                                                                totalSize += blob.size;
-                                                                if (totalSize > maxSize) {
-                                                                    cache.delete(key);
-                                                                }
-                                                            });
-                                                        }
-                                                    });
-                                                });
-                                            });
-                                        });
-                                    }
-
-                                    // Unity WebGL cache optimization
-                                    if (window.unityInstance) {
-                                        // Store Unity build files in cache
-                                        const unityFiles = [
-                                            'Build/UnityLoader.js',
-                                            'Build/UnityLoader.js.mem',
-                                            'Build/UnityLoader.js.memgz',
-                                            'Build/UnityLoader.js.memgz.unityweb'
-                                        ];
-
-                                        unityFiles.forEach(function(file) {
-                                            fetch(file)
-                                                .then(response => response.blob())
-                                                .then(blob => {
-                                                    if ('caches' in window) {
-                                                        caches.open('unity-build').then(cache => {
-                                                            cache.put(file, new Response(blob));
-                                                        });
-                                                    }
-                                                });
-                                        });
-                                    }
-                                })();
-                            """.trimIndent(), null)
-
-                            // Set up cache monitoring
-                            webViewClient = object : WebViewClient() {
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    super.onPageFinished(view, url)
-                                    isLoading = false
-                                    
-                                    // Inject error recovery and stability enhancements
-                                    view?.evaluateJavascript("""
-                                        (function() {
-                                            // Error Recovery Configuration
-                                            const recoveryConfig = {
-                                                maxRetries: 3,
-                                                backoffBase: 1000,
-                                                maxBackoff: 30000,
-                                                qualityLevels: {
-                                                    high: { textureSize: 2048, msaa: 4, shadowQuality: 'high' },
-                                                    medium: { textureSize: 1024, msaa: 2, shadowQuality: 'medium' },
-                                                    low: { textureSize: 512, msaa: 0, shadowQuality: 'low' }
-                                                },
-                                                memoryThresholds: {
-                                                    warning: 0.8,
-                                                    critical: 0.9
-                                                },
-                                                networkTimeout: 10000,
-                                                wasmRetryDelay: 2000
-                                            };
-
-                                            // Error Recovery Manager
-                                            class ErrorRecoveryManager {
-                                                constructor() {
-                                                    this.retryCount = 0;
-                                                    this.lastError = null;
-                                                    this.recoveryInProgress = false;
-                                                    this.webglState = null;
-                                                    this.unityState = null;
-                                                }
-
-                                                // WebGL Context Recovery
-                                                async recoverWebGLContext(canvas) {
-                                                    if (this.recoveryInProgress) return;
-                                                    this.recoveryInProgress = true;
-
-                                                    try {
-                                                        // Save current WebGL state
-                                                        this.webglState = await this.saveWebGLState(canvas);
-                                                        
-                                                        // Attempt context recovery
-                                                        const gl = canvas.getContext('webgl2', {
-                                                            alpha: false,
-                                                            antialias: false,
-                                                            preserveDrawingBuffer: false,
-                                                            powerPreference: 'high-performance',
-                                                            failIfMajorPerformanceCaveat: false
-                                                        });
-
-                                                        if (gl) {
-                                                            // Restore WebGL state
-                                                            await this.restoreWebGLState(gl, this.webglState);
-                                                            console.log('WebGL context recovered successfully');
-                                                            this.retryCount = 0;
-                                                        } else {
-                                                            throw new Error('Failed to create WebGL context');
-                                                        }
-                                                    } catch (e) {
-                                                        console.error('WebGL recovery failed:', e);
-                                                        this.handleRecoveryFailure(e);
-                                                    } finally {
-                                                        this.recoveryInProgress = false;
-                                                    }
-                                                }
-
-                                                // Unity Crash Recovery
-                                                async recoverUnityCrash() {
-                                                    if (this.recoveryInProgress) return;
-                                                    this.recoveryInProgress = true;
-
-                                                    try {
-                                                        // Save Unity state
-                                                        this.unityState = await this.saveUnityState();
-                                                        
-                                                        // Attempt Unity recovery
-                                                        if (window.unityInstance) {
-                                                            await window.unityInstance.Quit();
-                                                            await new Promise(resolve => setTimeout(resolve, 1000));
-                                                            
-                                                            // Reinitialize Unity
-                                                            await this.initializeUnity();
-                                                            
-                                                            // Restore Unity state
-                                                            await this.restoreUnityState(this.unityState);
-                                                            console.log('Unity recovered successfully');
-                                                            this.retryCount = 0;
-                                                        }
-                                                    } catch (e) {
-                                                        console.error('Unity recovery failed:', e);
-                                                        this.handleRecoveryFailure(e);
-                                                    } finally {
-                                                        this.recoveryInProgress = false;
-                                                    }
-                                                }
-
-                                                // Memory Recovery
-                                                async handleMemoryPressure() {
-                                                    const memoryInfo = performance.memory;
-                                                    if (!memoryInfo) return;
-
-                                                    const usedHeap = memoryInfo.usedJSHeapSize;
-                                                    const totalHeap = memoryInfo.totalJSHeapSize;
-                                                    const memoryUsage = usedHeap / totalHeap;
-
-                                                    if (memoryUsage > recoveryConfig.memoryThresholds.critical) {
-                                                        // Critical memory pressure
-                                                        await this.reduceQuality('low');
-                                                        await this.forceGarbageCollection();
-                                                        await this.clearUnusedResources();
-                                                    } else if (memoryUsage > recoveryConfig.memoryThresholds.warning) {
-                                                        // Warning memory pressure
-                                                        await this.reduceQuality('medium');
-                                                        await this.clearUnusedResources();
-                                                    }
-                                                }
-
-                                                // Network Recovery
-                                                async handleNetworkError(url, error) {
-                                                    if (this.retryCount >= recoveryConfig.maxRetries) {
-                                                        throw new Error('Max retries exceeded');
-                                                    }
-
-                                                    const backoff = Math.min(
-                                                        recoveryConfig.backoffBase * Math.pow(2, this.retryCount),
-                                                        recoveryConfig.maxBackoff
-                                                    );
-
-                                                    await new Promise(resolve => setTimeout(resolve, backoff));
-                                                    this.retryCount++;
-
-                                                    try {
-                                                        const response = await fetch(url, {
-                                                            signal: AbortSignal.timeout(recoveryConfig.networkTimeout)
-                                                        });
-                                                        if (!response.ok) throw new Error('Network request failed');
-                                                        return response;
-                                                    } catch (e) {
-                                                        return this.handleNetworkError(url, e);
-                                                    }
-                                                }
-
-                                                // WebAssembly Recovery
-                                                async handleWasmError() {
-                                                    if (this.retryCount >= recoveryConfig.maxRetries) {
-                                                        throw new Error('Max WASM retries exceeded');
-                                                    }
-
-                                                    await new Promise(resolve => 
-                                                        setTimeout(resolve, recoveryConfig.wasmRetryDelay)
-                                                    );
-                                                    this.retryCount++;
-
-                                                    try {
-                                                        if (window.Module) {
-                                                            await window.Module.reload();
-                                                            console.log('WASM reloaded successfully');
-                                                            this.retryCount = 0;
-                                                        }
-                                                    } catch (e) {
-                                                        return this.handleWasmError();
-                                                    }
-                                                }
-
-                                                // Progressive Degradation
-                                                async handleUnsupportedFeature(feature) {
-                                                    console.warn('Unsupported feature:', feature);
-                                                    
-                                                    switch (feature) {
-                                                        case 'webgl2':
-                                                            return this.fallbackToWebGL1();
-                                                        case 'compressed_textures':
-                                                            return this.fallbackToUncompressedTextures();
-                                                        case 'float_textures':
-                                                            return this.fallbackToHalfFloatTextures();
-                                                        default:
-                                                            return this.reduceQuality('low');
-                                                    }
-                                                }
-
-                                                // Automatic Reload
-                                                async handlePersistentError() {
-                                                    if (this.retryCount >= recoveryConfig.maxRetries) {
-                                                        console.error('Persistent error, reloading page');
-                                                        window.location.reload();
-                                                        return;
-                                                    }
-
-                                                    const backoff = Math.min(
-                                                        recoveryConfig.backoffBase * Math.pow(2, this.retryCount),
-                                                        recoveryConfig.maxBackoff
-                                                    );
-
-                                                    await new Promise(resolve => setTimeout(resolve, backoff));
-                                                    this.retryCount++;
-
-                                                    try {
-                                                        await this.recoverWebGLContext(document.querySelector('canvas'));
-                                                        await this.recoverUnityCrash();
-                                                        this.retryCount = 0;
-                                                    } catch (e) {
-                                                        return this.handlePersistentError();
-                                                    }
-                                                }
-
-                                                // GPU Driver Crash Recovery
-                                                async handleGPUCrash() {
-                                                    console.warn('GPU driver crash detected');
-                                                    
-                                                    try {
-                                                        // Attempt to recover WebGL context
-                                                        await this.recoverWebGLContext(document.querySelector('canvas'));
-                                                        
-                                                        // Reduce quality settings
-                                                        await this.reduceQuality('low');
-                                                        
-                                                        // Clear GPU resources
-                                                        await this.clearGPUMemory();
-                                                        
-                                                        console.log('GPU recovery completed');
-                                                    } catch (e) {
-                                                        console.error('GPU recovery failed:', e);
-                                                        await this.handlePersistentError();
-                                                    }
-                                                }
-
-                                                // Helper Methods
-                                                async saveWebGLState(canvas) {
-                                                    const gl = canvas.getContext('webgl2');
-                                                    if (!gl) return null;
-
-                                                    return {
-                                                        viewport: gl.getParameter(gl.VIEWPORT),
-                                                        clearColor: gl.getParameter(gl.COLOR_CLEAR_VALUE),
-                                                        blendFunc: {
-                                                            src: gl.getParameter(gl.BLEND_SRC_RGB),
-                                                            dst: gl.getParameter(gl.BLEND_DST_RGB)
-                                                        }
-                                                    };
-                                                }
-
-                                                async restoreWebGLState(gl, state) {
-                                                    if (!state) return;
-
-                                                    gl.viewport(...state.viewport);
-                                                    gl.clearColor(...state.clearColor);
-                                                    gl.blendFunc(state.blendFunc.src, state.blendFunc.dst);
-                                                }
-
-                                                async saveUnityState() {
-                                                    if (!window.unityInstance) return null;
-
-                                                    return {
-                                                        qualityLevel: window.unityInstance.GetQualityLevel(),
-                                                        isPaused: window.unityInstance.IsPaused(),
-                                                        timeScale: window.unityInstance.GetTimeScale()
-                                                    };
-                                                }
-
-                                                async restoreUnityState(state) {
-                                                    if (!state || !window.unityInstance) return;
-
-                                                    window.unityInstance.SetQualityLevel(state.qualityLevel);
-                                                    if (state.isPaused) {
-                                                        window.unityInstance.Pause();
-                                                    }
-                                                    window.unityInstance.SetTimeScale(state.timeScale);
-                                                }
-
-                                                async reduceQuality(level) {
-                                                    if (!window.unityInstance) return;
-
-                                                    const quality = recoveryConfig.qualityLevels[level];
-                                                    try {
-                                                        window.unityInstance.SetQualityLevel(
-                                                            level === 'high' ? 5 :
-                                                            level === 'medium' ? 3 : 1
-                                                        );
-                                                        
-                                                        if (window.unityInstance.SetTextureQuality) {
-                                                            window.unityInstance.SetTextureQuality(quality.textureSize);
-                                                        }
-                                                        if (window.unityInstance.SetMSAA) {
-                                                            window.unityInstance.SetMSAA(quality.msaa);
-                                                        }
-                                                        if (window.unityInstance.SetShadowQuality) {
-                                                            window.unityInstance.SetShadowQuality(quality.shadowQuality);
-                                                        }
-                                                    } catch (e) {
-                                                        console.error('Quality reduction failed:', e);
-                                                    }
-                                                }
-
-                                                async forceGarbageCollection() {
-                                                    if (window.gc) {
-                                                        window.gc();
-                                                    }
-                                                    if (window.unityInstance?.CollectGarbage) {
-                                                        window.unityInstance.CollectGarbage();
-                                                    }
-                                                }
-
-                                                async clearUnusedResources() {
-                                                    if (window.unityInstance) {
-                                                        if (window.unityInstance.ClearUnusedAssets) {
-                                                            window.unityInstance.ClearUnusedAssets();
-                                                        }
-                                                        if (window.unityInstance.ClearUnusedBuffers) {
-                                                            window.unityInstance.ClearUnusedBuffers();
-                                                        }
-                                                    }
-                                                }
-
-                                                async clearGPUMemory() {
-                                                    const canvas = document.querySelector('canvas');
-                                                    const gl = canvas.getContext('webgl2');
-                                                    if (!gl) return;
-
-                                                    // Clear all textures
-                                                    const maxTextureUnits = gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
-                                                    for (let unit = 0; unit < maxTextureUnits; unit++) {
-                                                        gl.activeTexture(gl.TEXTURE0 + unit);
-                                                        gl.bindTexture(gl.TEXTURE_2D, null);
-                                                    }
-
-                                                    // Clear framebuffers
-                                                    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-                                                    
-                                                    // Clear renderbuffers
-                                                    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
-                                                    
-                                                    // Force GPU synchronization
-                                                    gl.finish();
-                                                }
-
-                                                handleRecoveryFailure(error) {
-                                                    this.lastError = error;
-                                                    console.error('Recovery failed:', error);
-                                                    this.handlePersistentError();
-                                                }
-                                            }
-
-                                            // Initialize error recovery
-                                            const errorRecovery = new ErrorRecoveryManager();
-
-                                            // Set up error handlers
-                                            function setupErrorHandlers() {
-                                                // WebGL context loss
-                                                const canvas = document.querySelector('canvas');
-                                                if (canvas) {
-                                                    canvas.addEventListener('webglcontextlost', (e) => {
-                                                        e.preventDefault();
-                                                        errorRecovery.recoverWebGLContext(canvas);
-                                                    });
-
-                                                    canvas.addEventListener('webglcontextrestored', () => {
-                                                        console.log('WebGL context restored');
-                                                    });
-                                                }
-
-                                                // Unity error handling
-                                                if (window.unityInstance) {
-                                                    window.unityInstance.onError = (error) => {
-                                                        console.error('Unity error:', error);
-                                                        errorRecovery.recoverUnityCrash();
-                                                    };
-                                                }
-
-                                                // Memory pressure monitoring
-                                                setInterval(() => {
-                                                    errorRecovery.handleMemoryPressure();
-                                                }, 5000);
-
-                                                // Network error handling
-                                                window.addEventListener('unhandledrejection', (event) => {
-                                                    if (event.reason instanceof TypeError && 
-                                                        event.reason.message.includes('Failed to fetch')) {
-                                                        errorRecovery.handleNetworkError(event.reason.url, event.reason);
-                                                    }
-                                                });
-
-                                                // WebAssembly error handling
-                                                if (window.Module) {
-                                                    window.Module.onRuntimeError = (error) => {
-                                                        console.error('WASM error:', error);
-                                                        errorRecovery.handleWasmError();
-                                                    };
-                                                }
-
-                                                // GPU driver crash detection
-                                                if (navigator.gpu) {
-                                                    navigator.gpu.addEventListener('uncapturederror', (event) => {
-                                                        errorRecovery.handleGPUCrash();
-                                                    });
-                                                }
-                                            }
-
-                                            // Initialize when Unity is ready
-                                            if (window.unityInstance) {
-                                                setupErrorHandlers();
-                                            } else {
-                                                window.addEventListener('UnityReady', setupErrorHandlers);
-                                            }
-
-                                            // Enhanced Ad Blocker Implementation
-                                            (function() {
-                                                // Override all possible ad-related functions
-                                                const adFunctions = [
-                                                    'showAd', 'showInterstitial', 'showRewardedAd', 'showReviveAd',
-                                                    'showBanner', 'showNativeAd', 'showVideoAd', 'showFullscreenAd',
-                                                    'showPopupAd', 'showOverlayAd', 'showInstreamAd', 'showOutstreamAd',
-                                                    'showStickyAd', 'showFloatingAd', 'showSidebarAd', 'showSponsoredAd',
-                                                    'showPromotedAd', 'showRecommendedAd', 'showSuggestedAd',
-                                                    'showGameDistributionAd', 'showY8Ad', 'showUnityAd',
-                                                    'showAdMob', 'showAdColony', 'showChartboost', 'showVungle',
-                                                    'showAppLovin', 'showIronSource', 'showTapjoy', 'showSupersonic',
-                                                    'showFyber', 'showMopub', 'showStartApp', 'showInMobi'
-                                                ];
-
-                                                adFunctions.forEach(func => {
-                                                    window[func] = function() {
-                                                        console.log('Blocked ad function:', func);
-                                                        return Promise.resolve();
-                                                    };
-                                                });
-
-                                                // Block ad-related properties
-                                                const adProperties = [
-                                                    'adsEnabled', 'adsDisabled', 'adBlockEnabled', 'adBlockDisabled',
-                                                    'showAds', 'hideAds', 'enableAds', 'disableAds',
-                                                    'isAdBlocked', 'isAdEnabled', 'hasAds', 'noAds'
-                                                ];
-
-                                                adProperties.forEach(prop => {
-                                                    Object.defineProperty(window, prop, {
-                                                        get: function() { return false; },
-                                                        set: function() { return false; }
-                                                    });
-                                                });
-
-                                                // Enhanced selectors for ad elements
-                                                const blockSelectors = [
-                                                    // General ad classes and IDs
-                                                    '[class*="ad"]', '[id*="ad"]', '[class*="ads"]', '[id*="ads"]',
-                                                    '[class*="banner"]', '[id*="banner"]', '[class*="sponsor"]', '[id*="sponsor"]',
-                                                    '[class*="promo"]', '[id*="promo"]', '[class*="popup"]', '[id*="popup"]',
-                                                    '[class*="overlay"]', '[id*="overlay"]', '[class*="modal"]', '[id*="modal"]',
-                                                    
-                                                    // Specific ad-related elements
-                                                    '.adblock-message', '#disable-adblock', '[class*="adblock"]', '[id*="adblock"]',
-                                                    '[class*="ad-block"]', '[id*="ad-block"]', '[class*="revive"]', '[id*="revive"]',
-                                                    '[class*="reward"]', '[id*="reward"]', '[class*="interstitial"]', '[id*="interstitial"]',
-                                                    '[class*="banner"]', '[id*="banner"]', '[class*="sponsored"]', '[id*="sponsored"]',
-                                                    '[class*="promoted"]', '[id*="promoted"]', '[class*="recommended"]', '[id*="recommended"]',
-                                                    
-                                                    // Game-specific ad elements
-                                                    '[class*="game-distribution"]', '[id*="game-distribution"]',
-                                                    '[class*="y8"]', '[id*="y8"]', '[class*="unity"]', '[id*="unity"]',
-                                                    '[class*="gamedistribution"]', '[id*="gamedistribution"]',
-                                                    
-                                                    // Common ad container classes
-                                                    '.ad-container', '#ad-container', '.ad-wrapper', '#ad-wrapper',
-                                                    '.ad-holder', '#ad-holder', '.ad-frame', '#ad-frame',
-                                                    '.ad-box', '#ad-box', '.ad-unit', '#ad-unit',
-                                                    
-                                                    // Specific ad networks
-                                                    '[class*="admob"]', '[id*="admob"]', '[class*="adcolony"]', '[id*="adcolony"]',
-                                                    '[class*="chartboost"]', '[id*="chartboost"]', '[class*="vungle"]', '[id*="vungle"]',
-                                                    '[class*="applovin"]', '[id*="applovin"]', '[class*="ironsource"]', '[id*="ironsource"]',
-                                                    '[class*="tapjoy"]', '[id*="tapjoy"]', '[class*="supersonic"]', '[id*="supersonic"]',
-                                                    '[class*="fyber"]', '[id*="fyber"]', '[class*="mopub"]', '[id*="mopub"]',
-                                                    '[class*="startapp"]', '[id*="startapp"]', '[class*="inmobi"]', '[id*="inmobi"]'
-                                                ];
-
-                                                // Function to remove ad elements
-                                                function removeAdElements() {
-                                                    blockSelectors.forEach(sel => {
-                                                        document.querySelectorAll(sel).forEach(el => {
-                                                            // Check if element is visible
-                                                            const style = window.getComputedStyle(el);
-                                                            if (style.display !== 'none' && style.visibility !== 'hidden') {
-                                                                // Check element content for ad-related text
-                                                                const content = (el.textContent || '').toLowerCase();
-                                                                const adKeywords = [
-                                                                    'ad', 'ads', 'advertisement', 'sponsored', 'promoted',
-                                                                    'recommended', 'suggested', 'banner', 'popup', 'overlay',
-                                                                    'revive', 'reward', 'interstitial', 'disable adblock',
-                                                                    'remove adblock', 'enable ads', 'disable ads'
-                                                                ];
-                                                                
-                                                                if (adKeywords.some(keyword => content.includes(keyword))) {
-                                                                    el.remove();
-                                                                }
-                                                            }
-                                                        });
-                                                    });
-                                                }
-
-                                                // Initial cleanup
-                                                removeAdElements();
-
-                                                // Enhanced observer for new elements
-                                                const observer = new MutationObserver((mutations) => {
-                                                    mutations.forEach(m => {
-                                                        m.addedNodes.forEach(node => {
-                                                            if (node.nodeType === 1) {
-                                                                // Check node content
-                                                                const content = (node.textContent || '').toLowerCase();
-                                                                const html = (node.innerHTML || '').toLowerCase();
-                                                                
-                                                                // Check for ad-related content
-                                                                if (content.includes('ad') || 
-                                                                    content.includes('sponsor') ||
-                                                                    content.includes('promo') ||
-                                                                    content.includes('banner') ||
-                                                                    content.includes('popup') ||
-                                                                    content.includes('overlay') ||
-                                                                    content.includes('revive') ||
-                                                                    content.includes('reward') ||
-                                                                    html.includes('ad') ||
-                                                                    html.includes('sponsor') ||
-                                                                    html.includes('promo') ||
-                                                                    html.includes('banner') ||
-                                                                    html.includes('popup') ||
-                                                                    html.includes('overlay') ||
-                                                                    html.includes('revive') ||
-                                                                    html.includes('reward')) {
-                                                                    node.remove();
-                                                                }
-                                                            }
-                                                        });
-                                                    });
-                                                    removeAdElements();
-                                                });
-
-                                                // Start observing with enhanced options
-                                                observer.observe(document.body, { 
-                                                    childList: true, 
-                                                    subtree: true,
-                                                    attributes: true,
-                                                    attributeFilter: ['style', 'class', 'id']
-                                                });
-
-                                                // Periodic cleanup
-                                                setInterval(removeAdElements, 1000);
-
-                                                // Block iframe ads
-                                                const blockIframeAds = () => {
-                                                    document.querySelectorAll('iframe').forEach(iframe => {
-                                                        const src = (iframe.src || '').toLowerCase();
-                                                        if (src.includes('ad') || 
-                                                            src.includes('banner') || 
-                                                            src.includes('sponsor') || 
-                                                            src.includes('promo')) {
-                                                            iframe.remove();
-                                                        }
-                                                    });
-                                                };
-
-                                                // Initial iframe cleanup
-                                                blockIframeAds();
-
-                                                // Watch for new iframes
-                                                const iframeObserver = new MutationObserver((mutations) => {
-                                                    mutations.forEach(m => {
-                                                        m.addedNodes.forEach(node => {
-                                                            if (node.nodeName === 'IFRAME') {
-                                                                blockIframeAds();
-                                                            }
-                                                        });
-                                                    });
-                                                });
-
-                                                iframeObserver.observe(document.body, {
-                                                    childList: true,
-                                                    subtree: true
-                                                });
-
-                                                // Block ad-related scripts
-                                                const blockAdScripts = () => {
-                                                    document.querySelectorAll('script').forEach(script => {
-                                                        const src = (script.src || '').toLowerCase();
-                                                        const content = (script.textContent || '').toLowerCase();
-                                                        
-                                                        if (src.includes('ad') || 
-                                                            src.includes('banner') || 
-                                                            src.includes('sponsor') || 
-                                                            src.includes('promo') ||
-                                                            content.includes('ad') ||
-                                                            content.includes('banner') ||
-                                                            content.includes('sponsor') ||
-                                                            content.includes('promo')) {
-                                                            script.remove();
-                                                        }
-                                                    });
-                                                };
-
-                                                // Initial script cleanup
-                                                blockAdScripts();
-
-                                                // Watch for new scripts
-                                                const scriptObserver = new MutationObserver((mutations) => {
-                                                    mutations.forEach(m => {
-                                                        m.addedNodes.forEach(node => {
-                                                            if (node.nodeName === 'SCRIPT') {
-                                                                blockAdScripts();
-                                                            }
-                                                        });
-                                                    });
-                                                });
-
-                                                scriptObserver.observe(document.body, {
-                                                    childList: true,
-                                                    subtree: true
-                                                });
-
-                                                // Remove dark overlays that may remain after ad removal
-                                                function removeDarkOverlays() {
-                                                    document.querySelectorAll('div, section, aside').forEach(el => {
-                                                        const style = window.getComputedStyle(el);
-                                                        const isOverlay = (
-                                                            (style.position === 'fixed' || style.position === 'absolute') &&
-                                                            parseInt(style.zIndex) > 1000 &&
-                                                            (style.backgroundColor.startsWith('rgba(0, 0, 0') || style.backgroundColor.startsWith('rgb(0, 0, 0'))
-                                                        );
-                                                        const isFullScreen = (
-                                                            (el.offsetWidth >= window.innerWidth * 0.9) &&
-                                                            (el.offsetHeight >= window.innerHeight * 0.9)
-                                                        );
-                                                        if (isOverlay && isFullScreen) {
-                                                            el.remove();
-                                                        }
-                                                    });
-                                                }
-
-                                                // Call after ad removal and periodically
-                                                removeDarkOverlays();
-                                                setInterval(removeDarkOverlays, 1000);
-                                            })();
-                                        })();
-                                    """.trimIndent(), null)
-                                }
-                            }
-
                             // Set layout parameters to optimize rendering
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
+                            
+                            // Enhanced WebGL and Unity optimizations
+                            evaluateJavascript("""
+                                (function() {
+                                    // Enhanced WebGL context optimization
+                                    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+                                    HTMLCanvasElement.prototype.getContext = function(contextType, attributes) {
+                                        if (contextType === 'webgl' || contextType === 'experimental-webgl') {
+                                            attributes = attributes || {};
+                                            attributes.alpha = false;
+                                            attributes.antialias = false;
+                                            attributes.powerPreference = 'high-performance';
+                                            attributes.preserveDrawingBuffer = false;
+                                            attributes.stencil = false;
+                                            attributes.depth = true;
+                                            attributes.desynchronized = true;
+                                            attributes.lowLatency = true;
+                                            attributes.xrCompatible = true;
+                                            attributes.failIfMajorPerformanceCaveat = false;
+                                        }
+                                        return originalGetContext.call(this, contextType, attributes);
+                                    };
 
+                                    // Network request prioritization
+                                    const originalFetch = window.fetch;
+                                    window.fetch = function(resource, init) {
+                                        if (resource instanceof Request) {
+                                            resource = resource.url;
+                                        }
+                                        
+                                        // Prioritize game assets
+                                        if (typeof resource === 'string' && 
+                                            (resource.endsWith('.wasm') || 
+                                             resource.endsWith('.data') || 
+                                             resource.endsWith('.unity3d'))) {
+                                            init = init || {};
+                                            init.headers = init.headers || {};
+                                            init.headers['Priority'] = 'high';
+                                            init.headers['X-Requested-With'] = 'UnityWebGL';
+                                            init.headers['Accept'] = '*/*';
+                                            init.headers['Accept-Encoding'] = 'gzip, deflate, br';
+                                        }
+                                        
+                                        return originalFetch.call(this, resource, init);
+                                    };
+
+                                    // Enhanced memory management
+                                    let lastGCTime = 0;
+                                    const GC_INTERVAL = 30000; // 30 seconds
+                                    
+                                    function scheduleGC() {
+                                        const now = performance.now();
+                                        if (now - lastGCTime > GC_INTERVAL) {
+                                            if (window.gc) {
+                                                window.gc();
+                                            }
+                                            lastGCTime = now;
+                                            
+                                            // Clear WebGL contexts if memory pressure is high
+                                            if (window.performance && window.performance.memory) {
+                                                const used = window.performance.memory.usedJSHeapSize;
+                                                const total = window.performance.memory.totalJSHeapSize;
+                                                if (used / total > 0.7) { // More aggressive GC at 70%
+                                                    const contexts = document.querySelectorAll('canvas');
+                                                    contexts.forEach(canvas => {
+                                                        const gl = canvas.getContext('webgl');
+                                                        if (gl) {
+                                                            gl.getExtension('WEBGL_lose_context')?.loseContext();
+                                                        }
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Monitor frame times for input lag
+                                    let lastFrameTime = performance.now();
+                                    let frameTimes = [];
+                                    
+                                    function monitorFrameTimes() {
+                                        const now = performance.now();
+                                        const frameTime = now - lastFrameTime;
+                                        lastFrameTime = now;
+                                        
+                                        frameTimes.push(frameTime);
+                                        if (frameTimes.length > 60) {
+                                            frameTimes.shift();
+                                        }
+                                        
+                                        // Calculate average frame time
+                                        const avgFrameTime = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
+                                        
+                                        // Adjust quality if frame times are too high
+                                        if (avgFrameTime > 33.33) { // Less than 30 FPS
+                                            qualityLevel = Math.max(0.5, qualityLevel - 0.1);
+                                            adjustQuality(qualityLevel);
+                                        }
+                                        
+                                        requestAnimationFrame(monitorFrameTimes);
+                                    }
+                                    
+                                    // Initialize enhanced optimizations
+                                    monitorFrameTimes();
+                                    setInterval(scheduleGC, GC_INTERVAL);
+                                    
+                                    // Unity-specific optimizations
+                                    if (window.unityInstance) {
+                                        // Set Unity quality level
+                                        window.unityInstance.SetQualityLevel(3); // Balanced quality
+                                        
+                                        // Enable Unity WebGL optimizations
+                                        window.unityInstance.Module.HEAPU8.buffer = new ArrayBuffer(1024 * 1024 * 50); // 50MB buffer
+                                    }
+                                })();
+                            """.trimIndent(), null)
+                            
                             // Load the URL
                             loadUrl("https://html5.gamedistribution.com/rvvASMiM/22e4de5183c44d4a91a2e78858948f6a/index.html?gd_sdk_referrer_url=https%3A%2F%2Fwww.y8.com%2Fgames%2F&key=y8&value=default&gd_zone_config=eyJwYXJlbnRVUkwiOiJodHRwczovL2h0bWw1LmdhbWVkaXN0cmlidXRpb24uY29tL2QyYWFhM2JhZDdkNjQxNDFiNTQ1YzkxM2UxMDU2ZTdiLz9nZF9zZGtfcmVmZXJyZXJfdXJsPWh0dHBzOi8vd3d3Lnk4LmNvbS9nYW1lcy8ma2V5PXk4JnZhbHVlPWRlZmF1bHQiLCJwYXJlbnREb21haW4iOiJ5OC5jb20iLCJ0b3BEb21haW4iOiJ5OC5jb20iLCJoYXNJbXByZXNzaW9uIjpmYWxzZSwibG9hZGVyRW5hYmxlZCI6dHJ1ZSwiaG9zdCI6Imh0bWw1LmdhbWVkaXN0cmlidXRpb24uY29tIiwidmVyc2lvbiI6IjEuNS4xNiJ9")
+
+                            // Clear cache and history
+                            clearHistory()
                         }
                     }
                 )
@@ -1919,7 +832,7 @@ fun WheelSpinScreen(
                 // Permission dialog
                 if (showPermissionDialog) {
                     AlertDialog(
-                        onDismissRequest = {
+                        onDismissRequest = { 
                             showPermissionDialog = false
                             pendingFileUpload?.onReceiveValue(emptyArray())
                             pendingFileUpload = null
@@ -1961,4 +874,4 @@ class WebAppInterface(private val context: Context) {
             Toast.makeText(context, "Please use the download button to save files.", Toast.LENGTH_LONG).show()
         }
     }
-}
+} 
