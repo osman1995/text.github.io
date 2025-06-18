@@ -519,10 +519,22 @@ fun WheelSpinScreen(
                                     view: WebView?,
                                     request: WebResourceRequest?
                                 ): WebResourceResponse? {
-                                    val url = request?.url?.toString() ?: ""
-                                    if (url.contains("relay-event.talkie-ai.com")) {
-                                        Log.w("WebView", "CORS request detected: $url")
+                                    val url = request?.url?.toString() ?: return null
+
+                                    val adDomains = listOf(
+                                        "doubleclick.net", "googlesyndication.com", "adservice.google.com",
+                                        "adservice.google.co", "adsafeprotected.com", "adnxs.com", "ads.",
+                                        "pagead", "zedo.com", "moatads.com", "amazon-adsystem.com"
+                                    )
+
+                                    for (domain in adDomains) {
+                                        if (url.contains(domain)) {
+                                            Log.d("AdBlocker", "Blocked ad: $url")
+                                            // Return empty response to block the ad
+                                            return WebResourceResponse("text/plain", "utf-8", null)
+                                        }
                                     }
+
                                     return super.shouldInterceptRequest(view, request)
                                 }
 
@@ -917,7 +929,7 @@ fun WheelSpinScreen(
                             }
                             
                             // Load the URL
-                            loadUrl("https://html5.gamedistribution.com/rvvASMiM/22e4de5183c44d4a91a2e78858948f6a/index.html?gd_sdk_referrer_url=https%3A%2F%2Fwww.y8.com%2Fgames%2F&key=y8&value=default&gd_zone_config=eyJwYXJlbnRVUkwiOiJodHRwczovL2h0bWw1LmdhbWVkaXN0cmlidXRpb24uY29tL2QyYWFhM2JhZDdkNjQxNDFiNTQ1YzkxM2UxMDU2ZTdiLz9nZF9zZGtfcmVmZXJyZXJfdXJsPWh0dHBzOi8vd3d3Lnk4LmNvbS9nYW1lcy8ma2V5PXk4JnZhbHVlPWRlZmF1bHQiLCJwYXJlbnREb21haW4iOiJ5OC5jb20iLCJ0b3BEb21haW4iOiJ5OC5jb20iLCJoYXNJbXByZXNzaW9uIjpmYWxzZSwibG9hZGVyRW5hYmxlZCI6dHJ1ZSwiaG9zdCI6Imh0bWw1LmdhbWVkaXN0cmlidXRpb24uY29tIiwidmVyc2lvbiI6IjEuNS4xNiJ9")
+                            loadUrl("https://html5.gamedistribution.com/rvvASMiM/60b85c7d324e4af0bbe525b9d47468e4/index.html?gd_sdk_referrer_url=https%3A%2F%2Fwww.y8.com%2Fgames%2F&key=y8&value=default&gd_zone_config=eyJwYXJlbnRVUkwiOiJodHRwczovL2h0bWw1LmdhbWVkaXN0cmlidXRpb24uY29tL2QyYWFhM2JhZDdkNjQxNDFiNTQ1YzkxM2UxMDU2ZTdiLz9nZF9zZGtfcmVmZXJyZXJfdXJsPWh0dHBzOi8vd3d3Lnk4LmNvbS9nYW1lcy8ma2V5PXk4JnZhbHVlPWRlZmF1bHQiLCJwYXJlbnREb21haW4iOiJ5OC5jb20iLCJ0b3BEb21haW4iOiJ5OC5jb20iLCJoYXNJbXByZXNzaW9uIjpmYWxzZSwibG9hZGVyRW5hYmxlZCI6dHJ1ZSwiaG9zdCI6Imh0bWw1LmdhbWVkaXN0cmlidXRpb24uY29tIiwidmVyc2lvbiI6IjEuNS4xNiJ9")
 
                             // Clear cache and history
                             clearHistory()
