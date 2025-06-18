@@ -634,18 +634,22 @@ fun WheelSpinScreen(
                                 setSupportZoom(false)
                                 mediaPlaybackRequiresUserGesture = false
                                 
-                                // Critical GPU acceleration settings
+                                // Critical performance settings
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                    // Enable smooth transitions for better performance
+                                    // Enable smooth transitions
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                         setEnableSmoothTransition(true)
                                     }
                                 }
                                 
-                                // Allow universal access for better game loading
+                                // Universal access and cache settings
                                 allowUniversalAccessFromFileURLs = true
                                 allowFileAccessFromFileURLs = true
+                                
+                                // Disable unnecessary features
+                                setGeolocationEnabled(false)
+                                setSupportMultipleWindows(false)
                                 
                                 // Configure cache with size limit
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -669,8 +673,22 @@ fun WheelSpinScreen(
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                                         setSustainedPerformanceMode(true)
                                     }
+                                    // Immersive gaming mode
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                                        decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                                                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                                or View.SYSTEM_UI_FLAG_FULLSCREEN)
+                                    }
                                 }
                             }
+                            
+                            // WebView container optimizations
+                            isHorizontalScrollBarEnabled = false
+                            isVerticalScrollBarEnabled = false
+                            overScrollMode = View.OVER_SCROLL_NEVER
                             
                             // Set layout parameters to optimize rendering
                             layoutParams = ViewGroup.LayoutParams(
@@ -696,36 +714,15 @@ fun WheelSpinScreen(
                                             attributes.lowLatency = true;
                                             attributes.xrCompatible = true;
                                             attributes.failIfMajorPerformanceCaveat = false;
+                                            attributes.premultipliedAlpha = false;
+                                            attributes.antialias = false;
                                         }
                                         return originalGetContext.call(this, contextType, attributes);
                                     };
 
-                                    // Network request prioritization
-                                    const originalFetch = window.fetch;
-                                    window.fetch = function(resource, init) {
-                                        if (resource instanceof Request) {
-                                            resource = resource.url;
-                                        }
-                                        
-                                        // Prioritize game assets
-                                        if (typeof resource === 'string' && 
-                                            (resource.endsWith('.wasm') || 
-                                             resource.endsWith('.data') || 
-                                             resource.endsWith('.unity3d'))) {
-                                            init = init || {};
-                                            init.headers = init.headers || {};
-                                            init.headers['Priority'] = 'high';
-                                            init.headers['X-Requested-With'] = 'UnityWebGL';
-                                            init.headers['Accept'] = '*/*';
-                                            init.headers['Accept-Encoding'] = 'gzip, deflate, br';
-                                        }
-                                        
-                                        return originalFetch.call(this, resource, init);
-                                    };
-
-                                    // Enhanced memory management
+                                    // Aggressive garbage collection
                                     let lastGCTime = 0;
-                                    const GC_INTERVAL = 30000; // 30 seconds
+                                    const GC_INTERVAL = 15000; // 15 seconds
                                     
                                     function scheduleGC() {
                                         const now = performance.now();
@@ -752,46 +749,153 @@ fun WheelSpinScreen(
                                         }
                                     }
                                     
-                                    // Monitor frame times for input lag
-                                    let lastFrameTime = performance.now();
-                                    let frameTimes = [];
-                                    
-                                    function monitorFrameTimes() {
-                                        const now = performance.now();
-                                        const frameTime = now - lastFrameTime;
-                                        lastFrameTime = now;
-                                        
-                                        frameTimes.push(frameTime);
-                                        if (frameTimes.length > 60) {
-                                            frameTimes.shift();
-                                        }
-                                        
-                                        // Calculate average frame time
-                                        const avgFrameTime = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
-                                        
-                                        // Adjust quality if frame times are too high
-                                        if (avgFrameTime > 33.33) { // Less than 30 FPS
-                                            qualityLevel = Math.max(0.5, qualityLevel - 0.1);
-                                            adjustQuality(qualityLevel);
-                                        }
-                                        
-                                        requestAnimationFrame(monitorFrameTimes);
-                                    }
-                                    
-                                    // Initialize enhanced optimizations
-                                    monitorFrameTimes();
-                                    setInterval(scheduleGC, GC_INTERVAL);
-                                    
-                                    // Unity-specific optimizations
+                                    // Unity-specific loading optimizations
                                     if (window.unityInstance) {
                                         // Set Unity quality level
                                         window.unityInstance.SetQualityLevel(3); // Balanced quality
                                         
                                         // Enable Unity WebGL optimizations
-                                        window.unityInstance.Module.HEAPU8.buffer = new ArrayBuffer(1024 * 1024 * 50); // 50MB buffer
+                                        window.unityInstance.Module.HEAPU8.buffer = new ArrayBuffer(1024 * 1024 * 100); // 100MB buffer
+                                        
+                                        // Optimize Unity loading
+                                        window.unityInstance.Module.instantiateWasm = function(imports, successCallback) {
+                                            return WebAssembly.instantiateStreaming(fetch('Build/UnityLoader.js'), imports)
+                                                .then(successCallback)
+                                                .catch(function(e) {
+                                                    console.error('Unity WebGL loading failed:', e);
+                                                    // Fallback to non-streaming
+                                                    return WebAssembly.instantiate(imports);
+                                                });
+                                        };
                                     }
+                                    
+                                    // WebGL context loss recovery
+                                    function setupContextLossRecovery() {
+                                        const canvases = document.querySelectorAll('canvas');
+                                        canvases.forEach(canvas => {
+                                            const gl = canvas.getContext('webgl');
+                                            if (gl) {
+                                                const loseContext = gl.getExtension('WEBGL_lose_context');
+                                                if (loseContext) {
+                                                    canvas.addEventListener('webglcontextlost', (event) => {
+                                                        event.preventDefault();
+                                                        console.log('WebGL context lost, attempting recovery...');
+                                                        // Clean up resources
+                                                        if (window.unityInstance) {
+                                                            window.unityInstance.Quit();
+                                                        }
+                                                    });
+                                                    
+                                                    canvas.addEventListener('webglcontextrestored', () => {
+                                                        console.log('WebGL context restored');
+                                                        // Reinitialize if needed
+                                                        if (window.unityInstance) {
+                                                            window.unityInstance.Restart();
+                                                        }
+                                                    });
+                                                }
+                                            }
+                                        });
+                                    }
+                                    
+                                    // Initialize optimizations
+                                    setupContextLossRecovery();
+                                    setInterval(scheduleGC, GC_INTERVAL);
                                 })();
                             """.trimIndent(), null)
+                            
+                            // Enhanced WebViewClient with game asset prioritization
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldInterceptRequest(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): WebResourceResponse? {
+                                    val url = request?.url?.toString() ?: ""
+                                    
+                                    // Prioritize game assets
+                                    if (url.endsWith(".wasm") || url.endsWith(".data") || 
+                                        url.endsWith(".unity3d") || url.endsWith(".mem")) {
+                                        
+                                        // Set high priority headers
+                                        val headers = mapOf(
+                                            "Priority" to "high",
+                                            "X-Requested-With" to "UnityWebGL",
+                                            "Accept" to "*/*",
+                                            "Accept-Encoding" to "gzip, deflate, br",
+                                            "Cache-Control" to "max-age=86400" // 24-hour cache
+                                        )
+                                        
+                                        // Detect MIME type
+                                        val mimeType = when {
+                                            url.endsWith(".wasm") -> "application/wasm"
+                                            url.endsWith(".data") -> "application/octet-stream"
+                                            url.endsWith(".unity3d") -> "application/octet-stream"
+                                            url.endsWith(".mem") -> "application/octet-stream"
+                                            else -> "application/octet-stream"
+                                        }
+                                        
+                                        return WebResourceResponse(
+                                            mimeType,
+                                            "UTF-8",
+                                            200,
+                                            "OK",
+                                            headers,
+                                            null
+                                        )
+                                    }
+                                    
+                                    return super.shouldInterceptRequest(view, request)
+                                }
+                                
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    error: WebResourceError?
+                                ) {
+                                    super.onReceivedError(view, request, error)
+                                    // Enhanced error handling for graphics-intensive content
+                                    if (request?.isForMainFrame == true) {
+                                        val errorDesc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                            error?.description ?: "Unknown error"
+                                        } else {
+                                            "Error loading page"
+                                        }
+                                        
+                                        // Handle specific WebGL errors
+                                        when {
+                                            errorDesc.contains("net::err_failed") -> {
+                                                Log.w("WebView", "Network error detected: $errorDesc")
+                                                view?.postDelayed({
+                                                    if (isOnlineCompat(context)) {
+                                                        view.reload()
+                                                    }
+                                                }, 2000)
+                                            }
+                                            errorDesc.contains("WebGL") -> {
+                                                Log.e("WebView", "WebGL error: $errorDesc")
+                                                // Attempt to recover WebGL context
+                                                view?.evaluateJavascript("""
+                                                    (function() {
+                                                        const canvases = document.querySelectorAll('canvas');
+                                                        canvases.forEach(canvas => {
+                                                            const gl = canvas.getContext('webgl');
+                                                            if (gl) {
+                                                                gl.getExtension('WEBGL_lose_context')?.restoreContext();
+                                                            }
+                                                        });
+                                                    })();
+                                                """.trimIndent(), null)
+                                            }
+                                            else -> {
+                                                hasError = true
+                                                errorMessage = "Error loading page: $errorDesc"
+                                                Log.e("WebView", "Error loading page: $errorDesc")
+                                            }
+                                        }
+                                    }
+                                    isLoading = false
+                                }
+                            }
                             
                             // Load the URL
                             loadUrl("https://html5.gamedistribution.com/rvvASMiM/22e4de5183c44d4a91a2e78858948f6a/index.html?gd_sdk_referrer_url=https%3A%2F%2Fwww.y8.com%2Fgames%2F&key=y8&value=default&gd_zone_config=eyJwYXJlbnRVUkwiOiJodHRwczovL2h0bWw1LmdhbWVkaXN0cmlidXRpb24uY29tL2QyYWFhM2JhZDdkNjQxNDFiNTQ1YzkxM2UxMDU2ZTdiLz9nZF9zZGtfcmVmZXJyZXJfdXJsPWh0dHBzOi8vd3d3Lnk4LmNvbS9nYW1lcy8ma2V5PXk4JnZhbHVlPWRlZmF1bHQiLCJwYXJlbnREb21haW4iOiJ5OC5jb20iLCJ0b3BEb21haW4iOiJ5OC5jb20iLCJoYXNJbXByZXNzaW9uIjpmYWxzZSwibG9hZGVyRW5hYmxlZCI6dHJ1ZSwiaG9zdCI6Imh0bWw1LmdhbWVkaXN0cmlidXRpb24uY29tIiwidmVyc2lvbiI6IjEuNS4xNiJ9")
